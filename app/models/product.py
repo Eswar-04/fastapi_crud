@@ -1,6 +1,6 @@
 from pydantic import BaseModel
-from typing import Optional
-class Product(BaseModel):
-    name : str
-    price : float
-    description : Optional[str] = None
+class Product(BaseModel):# this class defines what a product should look like (validation)
+    name: str # Product name
+    price: float # Product price
+    description: str # Product description
+# description is optional
