@@ -1,68 +1,59 @@
-from fastapi import APIRouter, HTTPException # FastAPI classes for routing and error handling
-from app.models.product import Product # Our product model for validation
-from app.utils.database import collection # MongoDB collection imported from utils
-from bson import ObjectId # To work with MongoDB's default ID format
+from fastapi import APIRouter, HTTPException  # Import FastAPI router and HTTP exception handling
+from pydantic import BaseModel  # For defining data models with validation
+from app.supabase_client import supabase  # Importing the Supabase client from the app module
 
-router = APIRouter()# Create a router object to group all product-related API routes
+router = APIRouter()  # Initializing API router for modular routing
 
-# CREATE a new product
+# Pydantic model for Product input validation
+class Product(BaseModel):
+    name: str           # Name of the product (required)
+    price: float        # Price of the product (required)
+    description: str    # Short description (required)
+
+# ▶ POST - Add a new product to the database
 @router.post("/product")
 def create_product(product: Product):
     try:
-        result = collection.insert_one(product.dict()) # Convert product model to dictionary and insert into MongoDB
-
-        return {"id": str(result.inserted_id)}# Return the ID of the newly created product
+        response = supabase.table("products").insert(product.dict()).execute()  # Insert product into 'products' table
+        return {"message": "Product added", "data": response.data}  # Return success message with inserted data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error creating product: {str(e)}")# If something goes wrong, return a 500 error
+        raise HTTPException(status_code=500, detail=str(e))  # Return 500 if something goes wrong
 
-# READ - Get all products
+# ▶ GET - Fetch all products from the database
 @router.get("/products")
-def get_all_products():
+def get_products():
     try:
-        products = []
-        for product in collection.find():# Loop through all documents in the collection
-
-            product["_id"] = str(product["_id"])# Convert MongoDB ObjectId to string so it’s JSON convertible
-            products.append(product)
-        return products
+        response = supabase.table("products").select("*").execute()  # Select all rows from 'products' table
+        print("Supabase response:", response)  # Debug print in terminal to check data
+        return response.data  # Return all product data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving products: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))  # Return 500 on error
 
-# READ - Get a single product by its ID
+# ▶ GET - Get a specific product by ID
 @router.get("/product/{product_id}")
-def get_product(product_id: str):
+def get_product(product_id: int):
     try:
-        product = collection.find_one({"_id": ObjectId(product_id)})# Try to find the product by its ID in MongoDB
-        if product:
-            product["_id"] = str(product["_id"])# Convert ObjectId to string
-            return product
-       
-        raise HTTPException(status_code=404, detail="Product not found") # If product not found, return 404 error
+        response = supabase.table("products").select("*").eq("id", product_id).execute()  # Fetch product by ID
+        if response.data:  # If data exists, return it
+            return response.data[0]  # Return first matching product
+        raise HTTPException(status_code=404, detail="Product not found")  # Return 404 if not found
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving product: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))  # Return 500 on error
 
-# UPDATE an existing product by ID
+# ▶ PUT - Update product info by ID
 @router.put("/product/{product_id}")
-def update_product(product_id: str, updated_product: Product):
+def update_product(product_id: int, product: Product):
     try:
-        # Update the matching product with new data
-        result = collection.update_one(
-            {"_id": ObjectId(product_id)},
-            {"$set": updated_product.dict()}
-        )
-        if result.modified_count == 1:
-            return {"message": "Product updated successfully"}
-        raise HTTPException(status_code=404, detail="Product not found or not modified")# Product not found or nothing was changed
+        response = supabase.table("products").update(product.dict()).eq("id", product_id).execute()  # Update matching product
+        return {"message": "Product updated", "data": response.data}  # Return updated data
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error updating product: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))  # Return 500 on error
 
-# DELETE a product by ID
+# ▶ DELETE - Remove a product by ID
 @router.delete("/product/{product_id}")
-def delete_product(product_id: str):
+def delete_product(product_id: int):
     try:
-        result = collection.delete_one({"_id": ObjectId(product_id)}) # Try to delete the product with given ID
-        if result.deleted_count == 1:
-            return {"message": "Product deleted successfully"}
-        raise HTTPException(status_code=404, detail="Product not found")# If product doesn't exist
+        response = supabase.table("products").delete().eq("id", product_id).execute()  # Delete product with matching ID
+        return {"message": "Product deleted"}  # Return confirmation message
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error deleting product: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))  # Return 500 on error
